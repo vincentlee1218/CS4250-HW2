@@ -47,6 +47,7 @@ def createDocument(col, docId, docText, docTitle, docDate, docCat):
       give your document a name to make it easy to find later
     docDate
       date is in yyyy-mm-dd format or datetime.datetime (recommended)
+      document will not be updated if format is invalid
     docCat
       category for the document
     """
@@ -85,17 +86,29 @@ def createDocument(col, docId, docText, docTitle, docDate, docCat):
     for term, tf in term_counts.items():
         terms.append({"term": term, "count": tf, "num_chars": len(term)})
 
+    # convert to datetime.datetime object
+    if type(docDate) is str:
+        try:
+            docDate = datetime.datetime.fromisoformat(docDate)
+        except ValueError:
+            print("Invalid date format entered, expected yyyy-mm-dd format")
+            return
+
     #Producing a final document as a dictionary including all the required fields
     result_dict = {
         "_id": docId, "title": docTitle, "text": docText,
-        "num_chars": text_char_length, "date": {"$date": docDate},
+        "num_chars": text_char_length, "date": docDate,
         "category": docCat, "terms": terms
     }
 
     # Insert the document
-    insert_result = col.insert_one(result_dict)
-    if not insert_result.acknowledged:
-        print("Could not add document " + docTitle)
+    try:
+        insert_result = col.insert_one(result_dict)
+        if not insert_result.acknowledged:
+            print("Could not add document " + docTitle)
+    except Exception as e:
+        print("Could not add document " + docTitle + ":")
+        print(e)
 
 def deleteDocument(col, docId):
     """Remove a document from the specified MongoDB collection by id.
@@ -115,11 +128,14 @@ def deleteDocument(col, docId):
             docId = int(docId)
 
     # Delete the document from the database
-    delete_result = col.delete_one({"_id": docId})
-    if not delete_result.acknowledged:
-        print("Delete operation failed")
-    elif delete_result.deleted_count == 0:
-        print("No document with _id " + str(docId) + " was found.")
+    try:
+        delete_result = col.delete_one({"_id": docId})
+        if not delete_result.acknowledged:
+            print("Delete operation failed")
+        elif delete_result.deleted_count == 0:
+            print("No document with _id " + str(docId) + " was found.")
+    except Exception as e:
+        print("Delete operation failed: " + str(e))
 
 def updateDocument(col, docId, docText, docTitle, docDate, docCat):
     """Update a document in the specified MongoDB collection.
@@ -134,6 +150,7 @@ def updateDocument(col, docId, docText, docTitle, docDate, docCat):
       give your document a name to make it easy to find later
     docDate
       date is in yyyy-mm-dd format or datetime.datetime (recommended)
+      document will not be updated if format is invalid
     docCat
       category for the document
     """
@@ -145,6 +162,14 @@ def updateDocument(col, docId, docText, docTitle, docDate, docCat):
     if type(docId) is str:
         if docId.isdecimal():
             docId = int(docId)
+
+    # convert to datetime.datetime object
+    if type(docDate) is str:
+        try:
+            docDate = datetime.datetime.fromisoformat(docDate)
+        except ValueError:
+            print("Invalid date format entered, expected yyyy-mm-dd format")
+            return
 
     express = 0
     if express:  # The easy way
@@ -158,19 +183,23 @@ def updateDocument(col, docId, docText, docTitle, docDate, docCat):
         text_results = evaluateDocText(docText)
         new_dict = {
             "title": docTitle, "text": docText,
-            "num_chars": text_results["num_chars"], "date": {"$date": docDate},
+            "num_chars": text_results["num_chars"], "date": docDate,
             "category": docCat, "terms": text_results["terms"]
         }
 
         # Update the document and display error messages if it occurs
-        update_result = col.update_one({"_id": docId}, {"$set": new_dict})
-        if not update_result.acknowledged:
-            print("Update operation failed")
-        else:
-            if update_result.matched_count == 0:
-                print("No documents matched query")
-            elif update_result.modified_count == 0:
-                print("No documents were updated")
+        try:
+            update_result = col.update_one({"_id": docId}, {"$set": new_dict})
+            if not update_result.acknowledged:
+                print("Update operation failed")
+            else:
+                if update_result.matched_count == 0:
+                    print("No documents matched query")
+                elif update_result.modified_count == 0:
+                    print("No documents were updated")
+        except Exception as e:
+            print("Could not update document " + docTitle + ":")
+            print(e)
 
 def getIndex(col):
     """Return a dictionary representing the inverted index in memory.
